@@ -1,41 +1,47 @@
 package dmitryv.lab1.config;
 
+import dmitryv.lab1.services.XmlUserDetailsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.annotation.SecurityConfigurerAdapter;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.web.DefaultSecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import dmitryv.lab1.filters.JWTFilter;
-import dmitryv.lab1.security.JWTUtil;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 
-@Configuration public class SecurityConfig extends WebSecurityConfigurerAdapter {
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig extends WebSecurityConfigurerAdapter {
 
-    @Autowired private JWTUtil jwtUtil;
+    @Autowired
+    private XmlUserDetailsService xmlUserDetailsService;
 
-    @Bean @Override public AuthenticationManager authenticationManagerBean() throws Exception {
-        return super.authenticationManagerBean();
+    @Override
+    protected void configure(AuthenticationManagerBuilder auth) throws Exception {
+        auth.userDetailsService(xmlUserDetailsService)
+                .passwordEncoder(passwordEncoder());
     }
 
-    @Override protected void configure(HttpSecurity http) throws Exception {
-        http.httpBasic().disable()
-                .csrf().disable()
-                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.ALWAYS)
-                .and().authorizeRequests()
-                .antMatchers("/user/**").permitAll()
-                .antMatchers("/message/**").permitAll()
-                .antMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                .anyRequest().authenticated()
-                .and().apply(new SecurityConfigurerAdapter<DefaultSecurityFilterChain, HttpSecurity>() {
-                    @Override public void configure(HttpSecurity builder) {
-                        builder.addFilterBefore(new JWTFilter(jwtUtil), UsernamePasswordAuthenticationFilter.class);
-                    }
-                });
+    @Override
+    protected void configure(HttpSecurity http) throws Exception {
+        http
+                .httpBasic()
+                .and()
+                .authorizeRequests()
+                .antMatchers("/user/login", "/user/register").permitAll()
+                .antMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/swagger-ui/index.html", "/webjars/**", "/swagger-resources/**").permitAll()
+                .anyRequest().authenticated() // Все остальные запросы требуют аутентификации
+                .and()
+                .csrf().disable() // Отключаем CSRF защиту для упрощения
+                .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
     }
 
-
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 }

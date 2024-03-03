@@ -44,12 +44,12 @@ import java.util.stream.StreamSupport;
     @Transactional
     public void deleteMessage(Long messageId) {
         repo.findById(messageId).ifPresent(message -> {
-            // Отсоединяем сообщение от пользователя, чтобы избежать каскадного удаления
+
             User user = message.getUser();
             if (user != null) {
                 user.getMessages().remove(message);
-                message.setUser(null); // Отсоединяем сообщение от пользователя
-                repo.save(message); // Сохраняем изменения перед удалением
+                message.setUser(null);
+                repo.save(message);
             }
             log.info("Attempting to delete message with ID: {}", message.getMessageId());
             repo.delete(message);
@@ -60,17 +60,17 @@ import java.util.stream.StreamSupport;
     public List<Message> getFilteredMessages(MessageReqFilters req, Optional<Long> userId) {
         Stream<Message> filteredMessages = StreamSupport.stream(repo.findAll().spliterator(), false);
 
-        // Фильтрация по userId, если указан и если запрос не от модератора
+
         if (userId.isPresent()) {
             filteredMessages = filteredMessages.filter(m -> m.getUser().getUserId() == userId.get());
         }
 
-        // Фильтрация по тексту сообщения, если указан
+
         if (req.text_message != null && !req.text_message.isEmpty()) {
             filteredMessages = filteredMessages.filter(m -> m.getTextMessage().contains(req.text_message));
         }
 
-        // Фильтрация по дате публикации, если указаны startDate и endDate
+
         if (req.startDate != null && req.endDate != null) {
             filteredMessages = filteredMessages.filter(m ->
                     m.getPublishedDate() != null &&
@@ -96,5 +96,13 @@ import java.util.stream.StreamSupport;
         return StreamSupport.stream(repo.findAll().spliterator(), false)
                 .filter(message -> message.getUser().getUserId() == userId)
                 .collect(Collectors.toList());
+    }
+
+    public boolean isOwner(String username, Long messageId) {
+        return repo.findById(messageId)
+                .map(Message::getUser)
+                .map(User::getUsername)
+                .filter(u -> u.equals(username))
+                .isPresent();
     }
 }

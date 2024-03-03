@@ -15,14 +15,10 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info().title("My Application API").version("1.0")
                         .description("Documentation of My Application API v1.0"))
-                .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
                 .components(new io.swagger.v3.oas.models.Components()
-                        .addSecuritySchemes("bearerAuth", new SecurityScheme()
-                                .name("bearerAuth")
+                        .addSecuritySchemes("basicAuth", new SecurityScheme()
                                 .type(SecurityScheme.Type.HTTP)
-                                .scheme("bearer")
-                                .bearerFormat("JWT")));
+                                .scheme("basic")));
     }
 
-    // Other beans and methods ...
 }

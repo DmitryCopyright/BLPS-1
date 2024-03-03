@@ -6,16 +6,17 @@ import org.jetbrains.annotations.Nullable;
 import javax.persistence.*;
 import java.time.LocalDateTime;
 
-//https://www.baeldung.com/spring-data-rest-relationships
 @Data @Entity @Table(name = "messages")
 public class Message {
 
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "message_seq_gen")
     @SequenceGenerator(name = "users_seq_gen", sequenceName = "message_id_seq")
+    @Column(name = "message_id")
     @Id private long messageId;
     @ManyToOne(optional = false, cascade = CascadeType.ALL) @JoinColumn(name = "user_id") private User user;
     private String text_message;
     @Nullable private String name;
+    @Column(name = "published_date")
     private LocalDateTime publishedDate;
 
     public Message() {}

@@ -1,1 +1,0 @@
-curl -X GET http://localhost:8080/user/1 > out.txt

@@ -1,5 +1,6 @@
 package dmitryv.lab1.services;
 
+import dmitryv.lab1.models.XmlUser;
 import lombok.val;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -16,15 +17,27 @@ import java.util.stream.StreamSupport;
     private final UserRepo repo;
     private final BCryptPasswordEncoder encoder;
 
+    @Autowired
+    private XmlUserDetailsService xmlUserDetailsService;
+
     @Autowired public UserService(UserRepo userRepo , BCryptPasswordEncoder encoder) {
         this.repo = userRepo;
         this.encoder = encoder;
     }
 
-    @Transactional public Optional<User> add(String email, String password, String name, boolean isModerator) {
-        val u = new User(email, encoder.encode(password), name, isModerator);
+    @Transactional
+    public Optional<User> add(String email, String password, String name, boolean isModerator) {
+        String encodedPassword = encoder.encode(password);
+        val u = new User(email, encodedPassword, name, isModerator);
         this.save(u);
-        return this.get(email); //загружаем из базы данных, чтобы получить сущность уже с присвоенным id
+        Optional<User> registeredUser = this.get(email);
+
+        // После добавления в БД сохраняем пользователя в XML
+        registeredUser.ifPresent(user -> xmlUserDetailsService.saveUser(
+                new XmlUser(user.getEmail(), user.getPassword(), user.isModerator() ? "MODERATOR" : "USER")
+        ));
+
+        return registeredUser;
     }
 
     public List<User> getAll() { return StreamSupport.stream(repo.findAll().spliterator(), false).collect(Collectors.toList()); }

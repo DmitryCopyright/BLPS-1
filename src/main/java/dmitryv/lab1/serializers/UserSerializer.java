@@ -7,7 +7,6 @@ import dmitryv.lab1.models.Message;
 import dmitryv.lab1.models.User;
 import java.io.IOException;
 
-//https://www.baeldung.com/jackson-custom-serialization
 public class UserSerializer extends StdSerializer<User> {
 
     //НЕ УДАЛЯТЬ! (нужен при сериализации)

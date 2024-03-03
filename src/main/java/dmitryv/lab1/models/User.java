@@ -19,12 +19,14 @@ public class User implements Serializable, UserDetails {
 
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "users_seq_gen")
     @SequenceGenerator(name = "users_seq_gen", sequenceName = "users_id_seq")
+    @Column(name = "user_id")
     @Id private long userId;
     @Transient private static final long serialVersionUID = 4L;
     @Nullable @Email private String email;
     @Nullable private String password;
     @Nullable private String name;
     @OneToMany(mappedBy = "user", fetch = FetchType.EAGER, cascade = CascadeType.PERSIST) private List<Message> messages;
+    @Column(name = "is_moderator")
     private boolean isModerator;
 
     public User() {}
