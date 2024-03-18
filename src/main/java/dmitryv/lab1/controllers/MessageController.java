@@ -1,13 +1,17 @@
 package dmitryv.lab1.controllers;
 
-import dmitryv.lab1.services.ModeratorService;
+import dmitryv.lab1.models.Topic;
+import dmitryv.lab1.repos.TopicRepo;
+import dmitryv.lab1.services.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -19,9 +23,9 @@ import dmitryv.lab1.requests.MessageEditReq;
 import dmitryv.lab1.requests.MessageReq;
 import dmitryv.lab1.requests.MessageReqFilters;
 import dmitryv.lab1.responses.MessageRes;
-import dmitryv.lab1.services.MessageService;
-import dmitryv.lab1.services.UserService;
+
 import javax.validation.Valid;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -33,6 +37,22 @@ public class MessageController {
     private UserService userService;
     @Autowired
     private MessageService messageService;
+    @Autowired
+    private ModeratorService moderatorService;
+
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
+
+    @Autowired
+    private TopicService topicService;
+    @Autowired
+    private TopicRepo topicRepo;
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Operation(summary = "Get all messages", description = "Retrieve a list of all messages")
     @ApiResponse(responseCode = "200", description = "Successfully retrieved list of messages",
@@ -104,22 +124,33 @@ public class MessageController {
     @ApiResponse(responseCode = "418", description = "Message contains forbidden words")
     @PreAuthorize("hasAuthority('ROLE_USER')")
     @PostMapping(path = "add", consumes = "application/json", produces = "application/json")
-    public ResponseEntity<?> addMessage(@RequestBody Message message) {
+    public ResponseEntity<?> addMessage(@RequestBody MessageReq messageReq) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
         Optional<User> userOptional = userService.get(username);
         if (!userOptional.isPresent()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
+        User user = userOptional.get();
 
-        if (!ModeratorService.moderate(message)) {
-            return ResponseEntity.status(HttpStatus.I_AM_A_TEAPOT).body("Message contains forbidden words");
+        Message newMessage = new Message();
+        newMessage.setTextMessage(messageReq.getText_message());
+        newMessage.setUser(user);
+        newMessage.setName(user.getName());
+        newMessage.setPublishedDate(LocalDateTime.now());
+
+        Optional<Message> messageOptional = messageService.addMessage(newMessage, user, messageReq.getTopicName());
+
+        if (messageOptional.isPresent()) {
+            Message message = messageOptional.get();
+            messagingTemplate.convertAndSend("/topic/" + messageReq.getTopicName(), message);
+            return ResponseEntity.status(HttpStatus.CREATED).build();
+        } else {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-
-        message.setUser(userOptional.get());
-        messageService.add(message);
-        return new ResponseEntity<>(HttpStatus.CREATED);
     }
+
+
 
     @PreAuthorize("hasAuthority('ROLE_MODERATOR') or (hasAuthority('ROLE_USER') and @messageService.isOwner(authentication.name, #req.messageIds))")
     @DeleteMapping(path = "delete", consumes = "application/json", produces = "application/json")
@@ -173,13 +204,29 @@ public class MessageController {
         }
 
         Long userId = userOptional.get().getUserId();
+        Optional<Message> messageOptional = messageService.editMessage(userId, editReq.getMessageId(), editReq.getNewText());
 
-        boolean isEdited = messageService.editMessage(userId, editReq.getMessageId(), editReq.getNewText());
-        if (isEdited) {
+        if (messageOptional.isPresent()) {
+            Message message = messageOptional.get();
+            topicService.createTopicUpdateRecord(message.getTopic());
             return new ResponseEntity<>(MessageRes.builder().msg("Message successfully modified").build(), HttpStatus.OK);
         } else {
             return new ResponseEntity<>(MessageRes.builder().msg("Forbidden to edit message or message not found").build(), HttpStatus.FORBIDDEN);
         }
     }
 
+    @GetMapping("/topics")
+    public ResponseEntity<List<Topic>> getAllTopics() {
+        return ResponseEntity.ok(topicService.getAllTopics());
+    }
+
+    @GetMapping("/topics/{topicName}/messages")
+    public ResponseEntity<List<Message>> getMessagesByTopic(@PathVariable String topicName) {
+        Optional<Topic> topic = topicRepo.findByName(topicName);
+        if (topic.isPresent()) {
+            return ResponseEntity.ok(new ArrayList<>(topic.get().getMessages()));
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
 }

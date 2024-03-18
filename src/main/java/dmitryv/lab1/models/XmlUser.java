@@ -27,7 +27,7 @@ public class XmlUser {
         this.roles = roles;
     }
 
-    // Геттеры и сеттеры
+
     public String getUsername() {
         return username;
     }

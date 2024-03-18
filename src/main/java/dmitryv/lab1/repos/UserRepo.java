@@ -4,9 +4,11 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;
 import dmitryv.lab1.models.User;
 
+import java.util.Optional;
+
 @Repository public interface UserRepo extends CrudRepository<User, Long> {
 
-    User getByEmail(String email);
+    Optional<User> findByEmail(String email);
 
     User getByUserId(long id);
 

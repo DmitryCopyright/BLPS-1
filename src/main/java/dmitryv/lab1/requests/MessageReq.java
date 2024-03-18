@@ -15,6 +15,11 @@ public class MessageReq implements Serializable {
     public String text_message;
     public String name;
     private LocalDateTime publishedDate;
+    private String topicName;
+
+    public String getTopicName() {
+        return topicName;
+    }
 
     public Message toMessage() {
         return new Message(null, text_message, name, publishedDate);

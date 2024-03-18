@@ -10,9 +10,7 @@ import dmitryv.lab1.serializers.UserSerializer;
 import javax.persistence.*;
 import javax.validation.constraints.Email;
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 @Data @Entity @Table(name = "users") @JsonSerialize(using = UserSerializer.class)
 public class User implements Serializable, UserDetails {
@@ -28,6 +26,12 @@ public class User implements Serializable, UserDetails {
     @OneToMany(mappedBy = "user", fetch = FetchType.EAGER, cascade = CascadeType.PERSIST) private List<Message> messages;
     @Column(name = "is_moderator")
     private boolean isModerator;
+    @ManyToMany
+    @JoinTable(
+            name = "user_subscriptions",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "topic_id"))
+    private Set<Topic> topics = new HashSet<>();
 
     public User() {}
 
@@ -62,4 +66,6 @@ public class User implements Serializable, UserDetails {
     @Override public boolean isCredentialsNonExpired() { return true; }
 
     @Override public boolean isEnabled() { return true; }
+
+
 }

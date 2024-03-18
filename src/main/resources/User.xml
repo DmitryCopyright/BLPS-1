@@ -31,6 +31,16 @@
         <roles>MODERATOR</roles>
     </user>
     <user>
+        <username>new@mail.ru</username>
+        <password>$2a$10$P5Wz6fr3XXvlTTJ9I9Hvxe/5MYy8mqdrHNirJSMZzliQ6fI1eZ4cq</password>
+        <roles>MODERATOR</roles>
+    </user>
+    <user>
+        <username>blps3@mail.ru</username>
+        <password>$2a$10$oCBGUrvy5vbcYqRAKYmBe.Y7hRIm9pYGkO3thAW.sKq7suo.bvRyG</password>
+        <roles>MODERATOR</roles>
+    </user>
+    <user>
         <username>user</username>
         <password>pass</password>
         <roles>USER</roles>

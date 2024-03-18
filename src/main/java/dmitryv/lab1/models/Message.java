@@ -1,5 +1,6 @@
 package dmitryv.lab1.models;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import lombok.Data;
 import org.jetbrains.annotations.Nullable;
 
@@ -18,6 +19,10 @@ public class Message {
     @Nullable private String name;
     @Column(name = "published_date")
     private LocalDateTime publishedDate;
+    @ManyToOne
+    @JoinColumn(name = "topic_id")
+    @JsonBackReference
+    private Topic topic;
 
     public Message() {}
 
@@ -34,4 +39,10 @@ public class Message {
     public void setTextMessage(String text_message) {
         this.text_message = text_message;
     }
+
+    public long getMessageId() {
+        return messageId;
+    }
+
+
 }

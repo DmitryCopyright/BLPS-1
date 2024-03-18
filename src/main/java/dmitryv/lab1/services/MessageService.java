@@ -1,15 +1,23 @@
 package dmitryv.lab1.services;
 
+import dmitryv.lab1.models.*;
+import dmitryv.lab1.repos.NotificationRepo;
+import dmitryv.lab1.repos.TopicRepo;
+import dmitryv.lab1.repos.TopicUpdateRepo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import dmitryv.lab1.models.Message;
-import dmitryv.lab1.models.User;
 import dmitryv.lab1.repos.MessageRepo;
 import dmitryv.lab1.requests.MessageReqFilters;
 
+import org.springframework.data.domain.Pageable;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -18,19 +26,96 @@ import java.util.stream.StreamSupport;
 @Service public class MessageService {
 
     private final MessageRepo repo;
+    private final ModeratorService moderatorService;
     private static final Logger log = LoggerFactory.getLogger(MessageService.class);
 
+    @Autowired
+    private RabbitTemplate rabbitTemplate;
 
-    @Autowired public MessageService(MessageRepo repo) {
+    @Autowired
+    private TopicRepo topicRepo;
+
+    @Autowired
+    private UserService userService;
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
+    @Autowired
+    private TopicUpdateRepo topicUpdateRepo;
+
+    @Autowired
+    private NotificationRepo notificationRepo;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
+    private MessageRepo messageRepo;
+
+
+    @Autowired public MessageService(MessageRepo repo, ModeratorService moderatorService) {
         this.repo = repo;
+        this.moderatorService = moderatorService;
     }
 
-    public boolean add(Message a) {
-        if (a.getUser() == null || !ModeratorService.moderate(a)) return false;
+    @Transactional
+    public boolean add(Message message, User user) {
+        if (message.getUser() == null || !moderatorService.moderate(message, user)) return false;
         else {
-            this.save(a);
+            this.save(message);
             return true;
         }
+    }
+
+    public Optional<Message> addMessage(Message message, User user, String topicName) {
+        Topic topic = topicRepo.findByName(topicName).orElseGet(() -> {
+            Topic newTopic = new Topic();
+            newTopic.setName(topicName);
+            topicRepo.save(newTopic);
+            return newTopic;
+        });
+
+        message.setTopic(topic);
+        message.setUser(user);
+        // Установка времени публикации и имени пользователя
+        message.setPublishedDate(LocalDateTime.now());
+        message.setName(user.getName());
+
+        Message savedMessage = repo.save(message);
+
+        userService.subscribeUserToTopic(user.getEmail(), topic.getId());
+
+        rabbitTemplate.convertAndSend("forumTopicExchange", "topic.newMessage", "New message in topic: " + topicName);
+
+
+        sendMessageToTopic(topicName, "New message in topic: " + topicName);
+
+        createTopicUpdate(topic);
+
+        if (!topic.getSubscribers().isEmpty()) {
+            Set<User> subscribers = topic.getSubscribers();
+
+            String notificationMessage = "In topic '" + topicName + "' new message from " + user.getName() + ".";
+
+            subscribers.forEach(subscriber -> {
+                if (!subscriber.equals(user)) { // Проверка, что подписчик не является автором сообщения
+                    Notification notification = new Notification();
+                    notification.setUser(subscriber);
+                    notification.setMessage(notificationMessage);
+                    notificationRepo.save(notification);
+                }
+            });
+        }
+
+        return Optional.ofNullable(savedMessage);
+    }
+
+    private void createTopicUpdate(Topic topic) {
+        TopicUpdate topicUpdate = new TopicUpdate();
+        topicUpdate.setTopic(topic);
+        topicUpdate.setUpdatedAt(LocalDateTime.now());
+        topicUpdateRepo.save(topicUpdate);
     }
 
     public List<Message> getAll() {
@@ -44,7 +129,7 @@ import java.util.stream.StreamSupport;
     @Transactional
     public void deleteMessage(Long messageId) {
         repo.findById(messageId).ifPresent(message -> {
-
+            Topic topic = message.getTopic();
             User user = message.getUser();
             if (user != null) {
                 user.getMessages().remove(message);
@@ -54,6 +139,26 @@ import java.util.stream.StreamSupport;
             log.info("Attempting to delete message with ID: {}", message.getMessageId());
             repo.delete(message);
             log.info("Message with ID: {} deleted successfully", message.getMessageId());
+
+            // Отправка сообщения в RabbitMQ о удалении сообщения
+            rabbitTemplate.convertAndSend("forumTopicExchange", "topic.messageDeleted", "Message deleted in topic: " + topic.getName());
+
+            // Создание записи об обновлении топика
+            createTopicUpdate(topic);
+
+
+            String notificationMessage = "Message deleted in topic '" + topic.getName() + "'.";
+            topic.getSubscribers().forEach(subscriber -> {
+                if (!subscriber.equals(user)) {
+                    Notification notification = new Notification();
+                    notification.setUser(subscriber);
+                    notification.setMessage(notificationMessage);
+                    notificationRepo.save(notification);
+                }
+            });
+
+            // Отправка уведомления через STOMP
+            sendMessageToTopic(topic.getName(), notificationMessage);
         });
     }
 
@@ -82,14 +187,33 @@ import java.util.stream.StreamSupport;
     }
 
     @Transactional
-    public boolean editMessage(long userId, long messageId, String newText) {
-        Message message = repo.getByMessageId(messageId);
-        if (message != null && message.getUser().getUserId() == userId) {
-            message.setTextMessage(newText);
-            repo.save(message);
-            return true;
+    public Optional<Message> editMessage(long userId, long messageId, String newText) {
+        Optional<Message> messageOptional = repo.findById(messageId);
+
+        if (messageOptional.isPresent()) {
+            Message message = messageOptional.get();
+
+            if (message.getUser().getUserId() == userId) {
+                message.setTextMessage(newText);
+                Message savedMessage = repo.save(message);
+
+                createTopicUpdate(message.getTopic());
+
+              notificationService.generateInstantNotification(message.getTopic(), message.getUser());
+
+                return Optional.of(savedMessage);
+            }
         }
-        return false;
+        return Optional.empty();
+    }
+
+    public Optional<Message> getLastMessageForTopic(Topic topic) {
+        Pageable limit = PageRequest.of(0, 1, Sort.by(Sort.Direction.DESC, "publishedDate"));
+        List<Message> messages = messageRepo.findTopByTopicOrderByIdDesc(topic, limit);
+        if (!messages.isEmpty()) {
+            return Optional.of(messages.get(0));
+        }
+        return Optional.empty();
     }
 
     public List<Message> getMessagesByUserId(long userId) {
@@ -104,5 +228,9 @@ import java.util.stream.StreamSupport;
                 .map(User::getUsername)
                 .filter(u -> u.equals(username))
                 .isPresent();
+    }
+
+    public void sendMessageToTopic(String topic, String message) {
+        messagingTemplate.convertAndSend("/topic/" + topic, message);
     }
 }

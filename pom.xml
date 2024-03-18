@@ -85,6 +85,38 @@
             <artifactId>spring-boot-starter-jta-atomikos</artifactId>
         </dependency>
 
+        <!-- Spring Boot RabbitMQ -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-artemis</artifactId>
+        </dependency>
+
+            <!-- Другие зависимости -->
+
+
+            <!-- RabbitMQ AMQP Client (используйте для Spring AMQP) -->
+            <dependency>
+                <groupId>org.springframework.amqp</groupId>
+                <artifactId>spring-rabbit</artifactId>
+            </dependency>
+
+            <!-- RabbitMQ JMS Client -->
+            <dependency>
+                <groupId>com.rabbitmq.jms</groupId>
+                <artifactId>rabbitmq-jms</artifactId>
+                <version>1.15.2</version> <!-- Убедитесь, что это последняя версия -->
+            </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>

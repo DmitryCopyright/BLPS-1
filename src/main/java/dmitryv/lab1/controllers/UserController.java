@@ -1,20 +1,22 @@
 package dmitryv.lab1.controllers;
 
 import dmitryv.lab1.models.XmlUser;
+import dmitryv.lab1.services.NotificationService;
 import dmitryv.lab1.services.XmlUserDetailsService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import dmitryv.lab1.models.User;
 import dmitryv.lab1.requests.UserRequest;
 import dmitryv.lab1.responses.UserRes;
-import dmitryv.lab1.security.JWTUtil;
 import dmitryv.lab1.services.UserService;
 
 import javax.validation.Valid;
+import java.security.Principal;
 import java.util.*;
 
 @RestController
@@ -28,6 +30,12 @@ public class UserController {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private NotificationService notificationService;
+
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
 
     @GetMapping(path = "all", produces = "application/json")
     @PreAuthorize("hasAuthority('MODERATOR')")
@@ -70,6 +78,34 @@ public class UserController {
                             .build(),
                     HttpStatus.CREATED);
         }
+    }
+
+    @PostMapping("/subscribe/{topicId}")
+    @PreAuthorize("hasAuthority('USER')")
+    public ResponseEntity<?> subscribeToTopic(@PathVariable Long topicId, Principal principal) {
+        String email = principal.getName();
+        if (service.subscribeUserToTopic(email, topicId)) {
+            messagingTemplate.convertAndSend("/user/" + email + "/queue/updates", "Subscribed to topic " + topicId);
+            return ResponseEntity.ok().build();
+        } else {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/unsubscribe/{topicId}")
+    @PreAuthorize("hasAuthority('USER')")
+    public ResponseEntity<?> unsubscribeFromTopic(@PathVariable Long topicId, Principal principal) {
+        String email = principal.getName();
+        service.unsubscribeUserFromTopic(email, topicId);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/notifications")
+    @PreAuthorize("hasAuthority('USER')")
+    public ResponseEntity<List<String>> getNotifications(Principal principal) {
+        String email = principal.getName();
+        List<String> notifications = notificationService.getNotificationsForUser(email);
+        return ResponseEntity.ok(notifications);
     }
 
 //    @DeleteMapping(path = "delete", consumes = "application/json", produces = "application/json")
