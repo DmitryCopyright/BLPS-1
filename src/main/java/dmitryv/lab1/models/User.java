@@ -15,6 +15,10 @@ import java.util.*;
 @Data @Entity @Table(name = "users") @JsonSerialize(using = UserSerializer.class)
 public class User implements Serializable, UserDetails {
 
+    public long getId() {
+        return userId;
+    }
+
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "users_seq_gen")
     @SequenceGenerator(name = "users_seq_gen", sequenceName = "users_id_seq")
     @Column(name = "user_id")

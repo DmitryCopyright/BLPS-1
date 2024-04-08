@@ -59,24 +59,19 @@ public class UserController {
 
     @PutMapping(path = "register", consumes = "application/json", produces = "application/json")
     public ResponseEntity<UserRes> register(@Valid @RequestBody UserRequest req) {
-        if (service.exist(req.getEmail())) {
+        String encodedPassword = passwordEncoder.encode(req.getPassword());
+        Optional<User> user = service.add(req.getEmail(), encodedPassword, req.getName(), req.isModerator());
+        if (user.isPresent()) {
+            xmlUserDetailsService.saveUser(new XmlUser(user.get().getEmail(), encodedPassword, user.get().isModerator() ? "MODERATOR" : "USER"));
             return new ResponseEntity<>(
-                    UserRes.builder().msg("User already exist").build(),
-                    HttpStatus.CONFLICT);
+                    UserRes.builder().msg("User registered successfully. Please log in.").build(),
+                    HttpStatus.CREATED
+            );
         } else {
-            String encodedPassword = passwordEncoder.encode(req.getPassword());
-            User user = service.add(req.getEmail(), encodedPassword, req.getName(), req.isModerator())
-                    .orElseThrow(() -> new RuntimeException("User creation failed"));
-
-            // Добавляем пользователя в XML
-            xmlUserDetailsService.saveUser(new XmlUser(user.getEmail(), encodedPassword, user.isModerator() ? "MODERATOR" : "USER"));
-
-            // Теперь возвращаем ответ
             return new ResponseEntity<>(
-                    UserRes.builder()
-                            .msg("User registered successfully. Please log in.")
-                            .build(),
-                    HttpStatus.CREATED);
+                    UserRes.builder().msg("User already exist or creation failed").build(),
+                    HttpStatus.CONFLICT
+            );
         }
     }
 
